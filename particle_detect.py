@@ -8,6 +8,7 @@
 
 
 from __future__ import print_function, division
+from PIL import Image
 import cv2
 import torch
 import torch.nn as nn
@@ -63,40 +64,34 @@ def particle_detect():
     # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
     model_ft.fc = nn.Linear(num_ftrs, 4)
 
-
     model_ft.load_state_dict(torch.load('/model/ResNeXt-101_tuned'))
     model_ft.eval()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model_ft = model_ft.to(device)
+    
+    transform = transforms.Compose([
+        transforms.RandomResizedCrop(224),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    
     cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
+    int count = 0
     if cap.isOpened():
-        cv2.namedWindow("Face Detect", cv2.WINDOW_AUTOSIZE)
-        while cv2.getWindowProperty("Face Detect", 0) >= 0:
+        while (count < 20):
             ret, img = cap.read()
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-
-            for (x, y, w, h) in faces:
-                cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-                roi_gray = gray[y : y + h, x : x + w]
-                roi_color = img[y : y + h, x : x + w]
-                eyes = eye_cascade.detectMultiScale(roi_gray)
-                for (ex, ey, ew, eh) in eyes:
-                    cv2.rectangle(
-                        roi_color, (ex, ey), (ex + ew, ey + eh), (0, 255, 0), 2
-                    )
-
-            cv2.imshow("Face Detect", img)
-            keyCode = cv2.waitKey(30) & 0xFF
-            # Stop the program on the ESC key
-            if keyCode == 27:
-                break
+            img = transform(img).to(device)
+            outputs = model_ft(img.reshape(1, 3, 224, 224))
+            _, preds = torch.max(outputs, 1)
+            print(preds.item())
+            count += 1
 
         cap.release()
-        cv2.destroyAllWindows()
+
     else:
         print("Unable to open camera")
 
 
 if __name__ == "__main__":
-    face_detect()
+    particle_detect()
